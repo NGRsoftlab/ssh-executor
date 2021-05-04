@@ -2,5 +2,5 @@
 Lib for local&amp;remote ssh connect&execution
 
 ```
-import sshExecutor github.com/NGRsoftlab/ssh-executor
+import "sshExecutor github.com/NGRsoftlab/ssh-executor"
 ```

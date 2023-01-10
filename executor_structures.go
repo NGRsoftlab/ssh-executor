@@ -6,7 +6,7 @@ const (
 	xTermWidth  = 40
 )
 
-// Params for scp file sending
+// FilePathParams params for scp file sending
 type FilePathParams struct {
 	RootFolder   string
 	FolderName   string
@@ -16,7 +16,7 @@ type FilePathParams struct {
 	Content      string
 }
 
-// Params for ssh connection
+// ConnectParams params for ssh connection
 type ConnectParams struct {
 	Host string
 	Port string

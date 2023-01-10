@@ -1,27 +1,28 @@
 package sshExecutor
 
 import (
-	errorLib "github.com/NGRsoftlab/error-lib"
-	"github.com/NGRsoftlab/ngr-logging"
-
 	"bufio"
 	"context"
 	"fmt"
-	"golang.org/x/crypto/ssh"
 	"io"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/ssh"
+
+	errorLib "github.com/NGRsoftlab/error-lib"
+	"github.com/NGRsoftlab/ngr-logging"
 )
 
-// Ssh connection struct
+// Connection ssh connection struct
 type Connection struct {
 	*ssh.Client
 	password string
 }
 
-// Getting ssh connection
+// GetSshConnection getting ssh connection
 func GetSshConnection(connParams ConnectParams, timeout time.Duration) (connection *Connection, err error) {
 	sshConfig := makeSshClientConfig(connParams.User, connParams.Psw, timeout)
 
@@ -61,7 +62,7 @@ func GetSshConnection(connParams ConnectParams, timeout time.Duration) (connecti
 	return &Connection{connClient, connParams.Psw}, nil
 }
 
-// Connection checking for sudo password ask (with recovery, be careful)
+// SendSudoPassword checking for sudo password ask (with recovery, be careful)
 func (conn *Connection) SendSudoPassword(in io.WriteCloser, out io.Reader, output *[]byte) {
 	// recovery
 	defer recoverExecutor()
@@ -94,7 +95,7 @@ func (conn *Connection) SendSudoPassword(in io.WriteCloser, out io.Reader, outpu
 	}
 }
 
-// Sending many commands (may be with SUDO, without strErr output)
+// SendSudoCommandsWithoutErrOut sending many commands (may be with SUDO, without strErr output)
 func (conn *Connection) SendSudoCommandsWithoutErrOut(commands ...string) ([]byte, error) {
 	session, err := conn.NewSession()
 	if err != nil {
@@ -122,7 +123,13 @@ func (conn *Connection) SendSudoCommandsWithoutErrOut(commands ...string) ([]byt
 
 	var output []byte
 
-	go conn.SendSudoPassword(in, out, &output)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		conn.SendSudoPassword(in, out, &output)
+	}()
 
 	commandsString := strings.Join(commands, "; ")
 	_, err = session.Output(commandsString)
@@ -130,34 +137,36 @@ func (conn *Connection) SendSudoCommandsWithoutErrOut(commands ...string) ([]byt
 		return nil, err
 	}
 
+	wg.Wait()
+
 	return output, nil
 }
 
-// Sending one command (no SUDO, with strErr output, with killChan)
+// SendOneCommandWithErrOut sending one command (no SUDO, with strErr output, with killChan)
 func (conn *Connection) SendOneCommandWithErrOut(kill chan *os.Signal, command string) ([]byte, []byte, time.Duration, error) {
 	start := time.Now()
 
 	session, err := conn.NewSession()
 	if err != nil {
-		logging.Logger.Error("Error session ssh: ", err)
+		logging.Logger.Errorf("Error session ssh: %s", err.Error())
 		return nil, nil, time.Since(start), err
 	}
 
 	if err := session.RequestPty("xterm", xTermHeight, xTermWidth, makeSshTerminalModes()); err != nil {
 		_ = session.Close()
-		logging.Logger.Error("Error terminal: ", err)
+		logging.Logger.Errorf("Error terminal: %s", err.Error())
 		return nil, nil, time.Since(start), err
 	}
 
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		logging.Logger.Error("Error session stdout: ", err)
+		logging.Logger.Errorf("Error session stdout: %s", err.Error())
 		return nil, nil, time.Since(start), err
 	}
 
 	stderr, err := session.StderrPipe()
 	if err != nil {
-		logging.Logger.Error("Error session stderr: ", err)
+		logging.Logger.Errorf("Error session stderr: %s", err.Error())
 		return nil, nil, time.Since(start), err
 	}
 
@@ -168,7 +177,7 @@ func (conn *Connection) SendOneCommandWithErrOut(kill chan *os.Signal, command s
 		defer wg.Done()
 		err = session.Run(command)
 
-		logging.Logger.Info("SEND SIGNAL", err)
+		logging.Logger.Infof("SEND KILL SIGNAL (%v)", err)
 		if kill != nil {
 			kill <- &os.Kill
 		}
@@ -191,16 +200,17 @@ func (conn *Connection) SendOneCommandWithErrOut(kill chan *os.Signal, command s
 	if err != nil {
 		return stdOut, stdErr, time.Since(start), err
 	}
+
 	return stdOut, stdErr, time.Since(start), nil
 }
 
-// Sending file (content = file string content) to rootFolder/folderName/fileName with scp
+// SendScpFile sending file (content = file string content) to rootFolder/folderName/fileName with scp
 func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathParams) (time.Duration, error) {
 	start := time.Now()
 
 	session, err := conn.NewSession()
 	if err != nil {
-		logging.Logger.Error("Error session ssh: ", err)
+		logging.Logger.Errorf("Error session ssh: %s", err.Error())
 		return time.Since(start), err
 	}
 
@@ -227,19 +237,19 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 			_, err = fmt.Fprintln(w, fmt.Sprintf("C0%s", pathParams.FileRights),
 				len(pathParams.Content), pathParams.FileName) // touch file (c-create)
 			if err != nil {
-				logging.Logger.Error("Error session scp: ", err)
+				logging.Logger.Errorf("Error session scp: %s", err.Error())
 				return
 			}
 			_, err = fmt.Fprint(w, pathParams.Content) // add content to file
 			if err != nil {
-				logging.Logger.Error("Error session scp: ", err)
+				logging.Logger.Errorf("Error session scp: %s", err.Error())
 				return
 			}
 		}
 
 		_, err = fmt.Fprint(w, "\x00") // transfer end with \x00
 		if err != nil {
-			logging.Logger.Error("Error session scp: ", err)
+			logging.Logger.Errorf("Error session scp: %s", err.Error())
 			return
 		}
 	}()
@@ -250,7 +260,8 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 	go func() {
 		defer wg.Done()
 		err = session.Run("/usr/bin/scp -tr " + pathParams.RootFolder)
-		logging.Logger.Info("SEND SIGNAL", err)
+
+		logging.Logger.Infof("SEND KILL SIGNAL (%v)", err)
 		if kill != nil {
 			kill <- &os.Kill
 		}

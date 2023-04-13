@@ -1,13 +1,14 @@
 package sshExecutor
 
 import (
-	errorLib "github.com/NGRsoftlab/error-lib"
-
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
 	"time"
+
+	errorLib "github.com/NGRsoftlab/error-lib"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type testCase struct {
@@ -21,7 +22,7 @@ type testCase struct {
 
 // ok values for tests
 // TODO: change to real creds for ok tests (!)
-const okHost, okPort, okUser, okPsw = "127.0.0.1", "22", "test", "test"
+const okHost, okPort, okUser, okPsw = "127.0.0.1", 22, "test", "test"
 const connTimeout, cmdTimeout = time.Second * 30, time.Second * 30
 
 /////////////////////////////////////////////////
@@ -104,7 +105,7 @@ func TestGetConnection(t *testing.T) {
 			inputData: testInfo{
 				connParams: ConnectParams{
 					Host: "999.999.999.999",
-					Port: "22",
+					Port: 22,
 					User: okUser,
 					Psw:  okPsw,
 				},
@@ -132,7 +133,7 @@ func TestGetConnection(t *testing.T) {
 			inputData: testInfo{
 				connParams: ConnectParams{
 					Host: okHost,
-					Port: "8123",
+					Port: 8123,
 					User: "___",
 					Psw:  "___",
 				},
@@ -202,7 +203,7 @@ func TestGetSudoCommandsWithoutErrOut(t *testing.T) {
 			inputData: testInfo{
 				connParams: ConnectParams{
 					Host: okHost,
-					Port: "8123",
+					Port: 8123,
 					User: okUser,
 					Psw:  okPsw,
 				},
@@ -333,7 +334,7 @@ func TestGetCommandOutWithErr(t *testing.T) {
 			inputData: testInfo{
 				connParams: ConnectParams{
 					Host: okHost,
-					Port: "8123",
+					Port: 8123,
 					User: okUser,
 					Psw:  okPsw,
 				},

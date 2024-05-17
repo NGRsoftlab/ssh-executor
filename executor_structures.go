@@ -18,8 +18,9 @@ type FilePathParams struct {
 
 // ConnectParams params for ssh connection
 type ConnectParams struct {
-	Host string
-	Port int
-	User string
-	Psw  string
+	Host       string
+	Port       int
+	User       string
+	Psw        string
+	PrivateKey string
 }

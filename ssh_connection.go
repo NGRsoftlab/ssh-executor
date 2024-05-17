@@ -24,7 +24,7 @@ type Connection struct {
 
 // GetSshConnection getting ssh connection
 func GetSshConnection(connParams ConnectParams, timeout time.Duration) (connection *Connection, err error) {
-	sshConfig := makeSshClientConfig(connParams.User, connParams.Psw, timeout)
+	sshConfig := makeSshClientConfig(connParams.User, connParams.Psw, connParams.PrivateKey, timeout)
 
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
@@ -177,7 +177,7 @@ func (conn *Connection) SendOneCommandWithErrOut(kill chan *os.Signal, command s
 		defer wg.Done()
 		err = session.Run(command)
 
-		logging.Logger.Infof("SEND KILL SIGNAL (%v)", err)
+		logging.Logger.Infof("Commands executed. (returned error: %v)", err)
 		if kill != nil {
 			kill <- &os.Kill
 		}

@@ -36,12 +36,23 @@ func scanPipe(r io.Reader) string {
 }
 
 // makeSshClientConfig get ssh client config (ssh.ClientConfig)
-func makeSshClientConfig(user, password string, timeout time.Duration) *ssh.ClientConfig {
+func makeSshClientConfig(user, password, privateKey string, timeout time.Duration) *ssh.ClientConfig {
+	var methods []ssh.AuthMethod
+	if privateKey != "" {
+		signer, err := ssh.ParsePrivateKey([]byte(privateKey))
+		if err != nil {
+			logging.Logger.Warningf("cannot parse private key: %v", err)
+		} else {
+			methods = append(methods, ssh.PublicKeys(signer))
+		}
+	}
+	if password != "" {
+		methods = append(methods, ssh.Password(password))
+	}
+
 	return &ssh.ClientConfig{
-		User: user,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(password),
-		},
+		User:            user,
+		Auth:            methods,
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error { return nil },
 		Timeout:         timeout,
 	}

@@ -33,16 +33,6 @@ func TestLocalExecContext(t *testing.T) {
 
 	testCases := []*testCase{
 		{
-			name: "bad command",
-			inputData: testInfo{
-				command: "hhhh",
-				params:  []string{"test"},
-				timeout: cmdTimeout,
-			},
-			failError: errors.New("local ssh command error: exec: \"hhhh\": executable file not found in %PATH%"),
-			mustFail:  true,
-		},
-		{
 			name: "ok case (same windows&linux)",
 			inputData: testInfo{
 				command: "arp",

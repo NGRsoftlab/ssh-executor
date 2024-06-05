@@ -1,8 +1,10 @@
+// Copyright © NGR Softlab 2020-2024
 package sshExecutor
 
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,9 +13,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-
-	errorLib "github.com/NGRsoftlab/error-lib"
-	"github.com/NGRsoftlab/ngr-logging"
 )
 
 // Connection ssh connection struct
@@ -36,7 +35,7 @@ func GetSshConnection(connParams ConnectParams, timeout time.Duration) (connecti
 		defer cancel()
 		connClient, err = ssh.Dial("tcp", fmt.Sprintf("%v:%v", connParams.Host, connParams.Port), sshConfig)
 		if err != nil {
-			logging.Logger.Error("bad ssh conn: ", err)
+			logger.Errorf("error: bad ssh conn %s\n", err.Error())
 		}
 	}(ctx)
 
@@ -44,18 +43,18 @@ func GetSshConnection(connParams ConnectParams, timeout time.Duration) (connecti
 	case <-ctx.Done():
 		switch ctx.Err() {
 		case context.DeadlineExceeded:
-			logging.Logger.Error("ssh conn timeout")
-			return nil, errorLib.GlobalErrors.ErrConnectionTimeout()
+			logger.Errorf("error: got ssh connection timeout\n")
+			return nil, errors.New("ssh connection timeout")
 		case context.Canceled:
-			logging.Logger.Info("ssh conn canceled by timeout")
+			logger.Infof("info: got ssh timeout cancelation\n")
 		}
 	}
 
 	if err != nil || connClient == nil {
 		if strings.Contains(err.Error(), "unable to authenticate") {
-			return nil, errorLib.GlobalErrors.ErrBadAuthData()
+			return nil, errors.New("invalid credentials for connection")
 		} else {
-			return nil, errorLib.GlobalErrors.ErrBadIpOrPort()
+			return nil, errors.New("invalid ip or port for connection")
 		}
 	}
 
@@ -99,25 +98,26 @@ func (conn *Connection) SendSudoPassword(in io.WriteCloser, out io.Reader, outpu
 func (conn *Connection) SendSudoCommandsWithoutErrOut(commands ...string) ([]byte, error) {
 	session, err := conn.NewSession()
 	if err != nil {
-		logging.Logger.Error(err)
+		logger.Errorf("error: create session %s\n", err.Error())
 		return nil, err
 	}
 
 	err = session.RequestPty("xterm", xTermHeight, xTermWidth, makeSshTerminalModes())
 	if err != nil {
-		logging.Logger.Error(err)
+		_ = session.Close()
+		logger.Errorf("error: pty term %s\n", err.Error())
 		return nil, err
 	}
 
 	in, err := session.StdinPipe()
 	if err != nil {
-		logging.Logger.Error(err)
+		logger.Errorf("error: session in pipe %s\n", err.Error())
 		return nil, err
 	}
 
 	out, err := session.StdoutPipe()
 	if err != nil {
-		logging.Logger.Error(err)
+		logger.Errorf("error: session out pipe %s\n", err.Error())
 		return nil, err
 	}
 
@@ -148,25 +148,25 @@ func (conn *Connection) SendOneCommandWithErrOut(kill chan *os.Signal, command s
 
 	session, err := conn.NewSession()
 	if err != nil {
-		logging.Logger.Errorf("Error session ssh: %s", err.Error())
+		logger.Errorf("error: session ssh %s\n", err.Error())
 		return nil, nil, time.Since(start), err
 	}
 
 	if err := session.RequestPty("xterm", xTermHeight, xTermWidth, makeSshTerminalModes()); err != nil {
 		_ = session.Close()
-		logging.Logger.Errorf("Error terminal: %s", err.Error())
+		logger.Errorf("error: terminal %s\n", err.Error())
 		return nil, nil, time.Since(start), err
 	}
 
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		logging.Logger.Errorf("Error session stdout: %s", err.Error())
+		logger.Errorf("error: session stdout pipe %s\n", err.Error())
 		return nil, nil, time.Since(start), err
 	}
 
 	stderr, err := session.StderrPipe()
 	if err != nil {
-		logging.Logger.Errorf("Error session stderr: %s", err.Error())
+		logger.Errorf("error: session stderr pipe %s\n", err.Error())
 		return nil, nil, time.Since(start), err
 	}
 
@@ -177,7 +177,7 @@ func (conn *Connection) SendOneCommandWithErrOut(kill chan *os.Signal, command s
 		defer wg.Done()
 		err = session.Run(command)
 
-		logging.Logger.Infof("Commands executed. (returned error: %v)", err)
+		logger.Infof("info: command executed, returned error (if not nil) - %v\n", err)
 		if kill != nil {
 			kill <- &os.Kill
 		}
@@ -210,7 +210,7 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 
 	session, err := conn.NewSession()
 	if err != nil {
-		logging.Logger.Errorf("Error session ssh: %s", err.Error())
+		logger.Errorf("error: session ssh %s\n", err.Error())
 		return time.Since(start), err
 	}
 
@@ -228,7 +228,7 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 			_, err = fmt.Fprintln(w, fmt.Sprintf("D0%s", pathParams.FolderRights),
 				0, pathParams.FolderName) // mkdir (d-dir)
 			if err != nil {
-				logging.Logger.Error("Error session scp: ", err)
+				logger.Errorf("error: session scp %s\n", err.Error())
 				return
 			}
 		}
@@ -237,19 +237,19 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 			_, err = fmt.Fprintln(w, fmt.Sprintf("C0%s", pathParams.FileRights),
 				len(pathParams.Content), pathParams.FileName) // touch file (c-create)
 			if err != nil {
-				logging.Logger.Errorf("Error session scp: %s", err.Error())
+				logger.Errorf("error: session scp fprint touch %s\n", err.Error())
 				return
 			}
 			_, err = fmt.Fprint(w, pathParams.Content) // add content to file
 			if err != nil {
-				logging.Logger.Errorf("Error session scp: %s", err.Error())
+				logger.Errorf("error: session scp fprint print %s\n", err.Error())
 				return
 			}
 		}
 
 		_, err = fmt.Fprint(w, "\x00") // transfer end with \x00
 		if err != nil {
-			logging.Logger.Errorf("Error session scp: %s", err.Error())
+			logger.Errorf("error: session scp %s\n", err.Error())
 			return
 		}
 	}()
@@ -261,7 +261,7 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 		defer wg.Done()
 		err = session.Run("/usr/bin/scp -tr " + pathParams.RootFolder)
 
-		logging.Logger.Infof("SEND KILL SIGNAL (%v)", err)
+		logger.Infof("info: got scp session kill sig %s\n", err.Error())
 		if kill != nil {
 			kill <- &os.Kill
 		}

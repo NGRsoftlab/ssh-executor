@@ -1,3 +1,4 @@
+// Copyright © NGR Softlab 2020-2024
 package sshExecutor
 
 // Ssh term sizes

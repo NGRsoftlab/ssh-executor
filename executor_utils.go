@@ -1,8 +1,11 @@
+// Copyright © NGR Softlab 2020-2024
 package sshExecutor
 
 import (
 	"bufio"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -10,9 +13,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-
-	errorLib "github.com/NGRsoftlab/error-lib"
-	"github.com/NGRsoftlab/ngr-logging"
 )
 
 // There are some standard scenarios of using ssh or scp
@@ -21,7 +21,7 @@ import (
 // recoverExecutor recovering from panic
 func recoverExecutor() {
 	if r := recover(); r != nil {
-		logging.Logger.Warningf("executor recovered from: %v", r)
+		logger.Errorf("fatal: recovery in %v\n", r)
 	}
 }
 
@@ -41,7 +41,7 @@ func makeSshClientConfig(user, password, privateKey string, timeout time.Duratio
 	if privateKey != "" {
 		signer, err := ssh.ParsePrivateKey([]byte(privateKey))
 		if err != nil {
-			logging.Logger.Warningf("cannot parse private key: %v", err)
+			logger.Warningf("warning: parse private key %s\n", err.Error())
 		} else {
 			methods = append(methods, ssh.PublicKeys(signer))
 		}
@@ -71,7 +71,6 @@ func makeSshTerminalModes() ssh.TerminalModes {
 
 // LocalExecContext local execution command with context
 func LocalExecContext(timeout time.Duration, command string, params ...string) (output []byte, err error) {
-	logging.Logger.Debugf("%s ::: %v", command, params)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -81,8 +80,8 @@ func LocalExecContext(timeout time.Duration, command string, params ...string) (
 		if output == nil {
 			output = []byte("")
 		}
-		logging.Logger.Warningf("Error local exec: %s ::: %s", err.Error(), string(output))
-		return output, errorLib.GlobalErrors.ErrSshCommands()
+		logger.Errorf("error: local exec err %s ::: out %s\n", err.Error(), string(output))
+		return output, fmt.Errorf("local ssh command error: %s", err.Error())
 	}
 	return
 }
@@ -92,14 +91,14 @@ func GetSudoCommandsOutWithoutErr(connParams ConnectParams,
 	timeoutConn, timeoutCmd time.Duration, commands ...string) (output []byte, err error) {
 	conn, err := GetSshConnection(connParams, timeoutConn)
 	if err != nil {
-		logging.Logger.Error(err)
+		logger.Errorf("error: ssh connection %s\n", err.Error())
 		return output, err
 	}
 
 	defer func() {
 		errClose := conn.Close()
 		if errClose != nil {
-			logging.Logger.Warningf("bad conn close: %s", errClose.Error())
+			logger.Warningf("warning: conn close %s\n", err.Error())
 		}
 	}()
 
@@ -116,16 +115,16 @@ func GetSudoCommandsOutWithoutErr(connParams ConnectParams,
 	case <-ctx.Done():
 		switch ctx.Err() {
 		case context.DeadlineExceeded:
-			logging.Logger.Error("ssh sudo commands timeout")
-			return output, errorLib.GlobalErrors.ErrConnectionTimeout()
+			logger.Errorf("error: sudo conn deadline timeout\n")
+			return output, errors.New("got sudo ssh connection deadline")
 		case context.Canceled:
-			logging.Logger.Info("ssh context cancelled by force, whole process is complete")
+			logger.Infof("info: ssh context cancelled by force, whole process in compeleted\n")
 		}
 	}
 
 	if err != nil {
-		logging.Logger.Errorf("ssh sudo commands error: %s", err.Error())
-		return output, errorLib.GlobalErrors.ErrSshCommands()
+		logger.Errorf("error: sudo ssh commands %s\n", err.Error())
+		return output, fmt.Errorf("sudo ssh command error: %s", err.Error())
 	}
 
 	return output, nil
@@ -140,14 +139,14 @@ func GetCommandOutWithErr(connParams ConnectParams, kill chan *os.Signal,
 
 	conn, err := GetSshConnection(connParams, timeoutConn)
 	if err != nil {
-		logging.Logger.Error(err)
+		logger.Errorf("error: ssh connection %s\n", err.Error())
 		return output, errOutput, 0, err
 	}
 
 	defer func() {
 		errClose := conn.Close()
 		if errClose != nil {
-			logging.Logger.Warningf("bad conn close: %s", errClose.Error())
+			logger.Warningf("warning: conn close %s\n", err.Error())
 		}
 	}()
 
@@ -164,17 +163,17 @@ func GetCommandOutWithErr(connParams ConnectParams, kill chan *os.Signal,
 	case <-ctx.Done():
 		switch ctx.Err() {
 		case context.DeadlineExceeded:
-			logging.Logger.Error("ssh command timeout")
+			logger.Errorf("error: ssh command deadline %s\n", err.Error())
 			kill <- &os.Kill
-			return output, errOutput, duration, errorLib.GlobalErrors.ErrConnectionTimeout()
+			return output, errOutput, duration, errors.New("got ssh connection deadline")
 		case context.Canceled:
-			logging.Logger.Info("ssh context cancelled by force, whole process is complete")
+			logger.Infof("info: ssh context cancelled by force, whole process is completed %s\n", err.Error())
 		}
 	}
 
 	if err != nil {
-		logging.Logger.Errorf("ssh command error: %s", err.Error())
-		return output, []byte(err.Error()), duration, errorLib.GlobalErrors.ErrSshCommands()
+		logger.Errorf("error: ssh command %s\n", err.Error())
+		return output, []byte(err.Error()), duration, fmt.Errorf("ssh command error: %s", err.Error())
 	}
 
 	return output, errOutput, duration, nil
@@ -189,14 +188,14 @@ func SendFileWithScp(connParams ConnectParams, kill chan *os.Signal,
 
 	conn, err := GetSshConnection(connParams, timeoutConn)
 	if err != nil {
-		logging.Logger.Error(err)
+		logger.Errorf("error: ssh conn %s\n", err.Error())
 		return 0, err
 	}
 
 	defer func() {
 		errClose := conn.Close()
 		if errClose != nil {
-			logging.Logger.Warningf("bad conn close: %s", errClose.Error())
+			logger.Warningf("warning: conn close %s\n", err.Error())
 		}
 	}()
 
@@ -215,17 +214,17 @@ func SendFileWithScp(connParams ConnectParams, kill chan *os.Signal,
 	case <-ctx.Done():
 		switch ctx.Err() {
 		case context.DeadlineExceeded:
-			logging.Logger.Error("scp command timeout")
+			logger.Errorf("error: scp command deadline\n")
 			kill <- &os.Kill
-			return duration, errorLib.GlobalErrors.ErrConnectionTimeout()
+			return duration, errors.New("got scp connection deadline")
 		case context.Canceled:
-			logging.Logger.Info("scp context cancelled by force, whole process is complete")
+			logger.Infof("info: scp context cancelled by force, whole process is completed %s\n", err.Error())
 		}
 	}
 
 	if err != nil {
-		logging.Logger.Errorf("scp command error: %s", err.Error())
-		return duration, errorLib.GlobalErrors.ErrSshCommands()
+		logger.Errorf("error: scp command %s\n", err.Error())
+		return duration, fmt.Errorf("scp command error: %s", err.Error())
 	}
 
 	return duration, nil

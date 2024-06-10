@@ -98,7 +98,7 @@ func GetSudoCommandsOutWithoutErr(connParams ConnectParams,
 	defer func() {
 		errClose := conn.Close()
 		if errClose != nil {
-			logger.Warningf("warning: conn close %s\n", err.Error())
+			logger.Warningf("warning: conn close %s\n", errClose.Error())
 		}
 	}()
 
@@ -146,7 +146,7 @@ func GetCommandOutWithErr(connParams ConnectParams, kill chan *os.Signal,
 	defer func() {
 		errClose := conn.Close()
 		if errClose != nil {
-			logger.Warningf("warning: conn close %s\n", err.Error())
+			logger.Warningf("warning: conn close %s\n", errClose.Error())
 		}
 	}()
 
@@ -163,11 +163,11 @@ func GetCommandOutWithErr(connParams ConnectParams, kill chan *os.Signal,
 	case <-ctx.Done():
 		switch ctx.Err() {
 		case context.DeadlineExceeded:
-			logger.Errorf("error: ssh command deadline %s\n", err.Error())
+			logger.Errorf("error: ssh command deadline %v\n", err)
 			kill <- &os.Kill
 			return output, errOutput, duration, errors.New("got ssh connection deadline")
 		case context.Canceled:
-			logger.Infof("info: ssh context cancelled by force, whole process is completed %s\n", err.Error())
+			logger.Infof("info: ssh context cancelled by force, whole process is completed %v\n", err)
 		}
 	}
 
@@ -195,7 +195,7 @@ func SendFileWithScp(connParams ConnectParams, kill chan *os.Signal,
 	defer func() {
 		errClose := conn.Close()
 		if errClose != nil {
-			logger.Warningf("warning: conn close %s\n", err.Error())
+			logger.Warningf("warning: conn close %s\n", errClose.Error())
 		}
 	}()
 
@@ -214,11 +214,11 @@ func SendFileWithScp(connParams ConnectParams, kill chan *os.Signal,
 	case <-ctx.Done():
 		switch ctx.Err() {
 		case context.DeadlineExceeded:
-			logger.Errorf("error: scp command deadline\n")
+			logger.Error("error: scp command deadline\n")
 			kill <- &os.Kill
 			return duration, errors.New("got scp connection deadline")
 		case context.Canceled:
-			logger.Infof("info: scp context cancelled by force, whole process is completed %s\n", err.Error())
+			logger.Infof("info: scp context cancelled by force, whole process is completed %v\n", err)
 		}
 	}
 

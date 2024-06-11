@@ -261,7 +261,7 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 		defer wg.Done()
 		err = session.Run("/usr/bin/scp -tr " + pathParams.RootFolder)
 
-		logger.Infof("info: got scp session kill sig %s\n", err.Error())
+		logger.Infof("info: got scp session kill sig %v\n", err)
 		if kill != nil {
 			kill <- &os.Kill
 		}

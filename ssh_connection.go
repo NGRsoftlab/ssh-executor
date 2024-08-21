@@ -210,14 +210,21 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 
 	session, err := conn.NewSession()
 	if err != nil {
-		logger.Errorf("error: session ssh %s\n", err.Error())
-		return time.Since(start), err
+		errMsg := fmt.Errorf("error: unable to start new SSH session: %v", err)
+		logger.Error(errMsg)
+		return time.Since(start), errMsg
 	}
 
 	defer func() { _ = session.Close() }()
 
+	logger.Infof("Starting SCP transfer to %s %s", pathParams.RootFolder, pathParams.FileName)
+
 	go func() {
-		w, _ := session.StdinPipe()
+		w, err := session.StdinPipe()
+		if err != nil {
+			logger.Errorf("error: unable to open stdin pipe for SCP transfer: %v", err)
+			return
+		}
 		defer func() {
 			if w != nil {
 				_ = w.Close()
@@ -225,31 +232,35 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 		}()
 
 		if pathParams.FolderName != "" {
+			logger.Infof("Creating directory %s with rights %s", pathParams.FolderName, pathParams.FolderRights)
 			_, err = fmt.Fprintln(w, fmt.Sprintf("D0%s", pathParams.FolderRights),
 				0, pathParams.FolderName) // mkdir (d-dir)
 			if err != nil {
-				logger.Errorf("error: session scp %s\n", err.Error())
+				logger.Errorf("error: failed to create directory %s: %v", pathParams.FolderName, err)
 				return
 			}
 		}
 
 		if pathParams.FileName != "" {
+			logger.Infof("Creating file %s with rights %s", pathParams.FileName, pathParams.FileRights)
 			_, err = fmt.Fprintln(w, fmt.Sprintf("C0%s", pathParams.FileRights),
 				len(pathParams.Content), pathParams.FileName) // touch file (c-create)
 			if err != nil {
-				logger.Errorf("error: session scp fprint touch %s\n", err.Error())
+				logger.Errorf("error: failed to create file %s: %v", pathParams.FileName, err)
 				return
 			}
+
+			logger.Infof("Writing content to file %s", pathParams.FileName)
 			_, err = fmt.Fprint(w, pathParams.Content) // add content to file
 			if err != nil {
-				logger.Errorf("error: session scp fprint print %s\n", err.Error())
+				logger.Errorf("error: failed to write content to file %s: %v", pathParams.FileName, err)
 				return
 			}
 		}
 
 		_, err = fmt.Fprint(w, "\x00") // transfer end with \x00
 		if err != nil {
-			logger.Errorf("error: session scp %s\n", err.Error())
+			logger.Errorf("error: failed to finalize transfer: %v", err)
 			return
 		}
 	}()
@@ -259,9 +270,12 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 
 	go func() {
 		defer wg.Done()
-		err = session.Run("/usr/bin/scp -tr " + pathParams.RootFolder)
 
-		logger.Infof("info: got scp session kill sig %v\n", err)
+		err = session.Run("/usr/bin/scp -tr " + pathParams.RootFolder)
+		if err != nil {
+			logger.Infof("info: got scp session kill sig %v\n", err)
+		}
+
 		if kill != nil {
 			kill <- &os.Kill
 		}
@@ -281,5 +295,6 @@ func (conn *Connection) SendScpFile(kill chan *os.Signal, pathParams FilePathPar
 	if err != nil {
 		return time.Since(start), err
 	}
+	logger.Infof("File %s transfer completed in %s", pathParams.FileName, time.Since(start))
 	return time.Since(start), nil
 }

@@ -8,8 +8,20 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type Logger interface {
+	Debugf(format string, args ...interface{})
+	Infof(format string, args ...interface{})
+	Warningf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
+
+	Debug(args ...interface{})
+	Info(args ...interface{})
+	Warning(args ...interface{})
+	Error(args ...interface{})
+}
+
 var (
-	logger = &logrus.Logger{
+	logger Logger = &logrus.Logger{
 		Out:   io.MultiWriter(os.Stderr),
 		Level: logrus.DebugLevel,
 		Formatter: &logrus.TextFormatter{
@@ -21,3 +33,7 @@ var (
 		ReportCaller: true,
 	}
 )
+
+func SetLogger(l Logger) {
+	logger = l
+}
